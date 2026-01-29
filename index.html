@@ -219,8 +219,8 @@
         }
         
         .touch-btn {
-            background: rgba(255, 255, 255, 0.2);
-            border: 2px solid rgba(255, 255, 255, 0.4);
+            background: rgba(255, 255, 255, 0.1);
+            border: 2px solid rgba(255, 255, 255, 0.2);
             border-radius: 10px;
             display: flex;
             align-items: center;
@@ -232,8 +232,8 @@
         }
         
         .touch-btn:active {
-            background: rgba(102, 126, 234, 0.5);
-            border-color: #667eea;
+            background: rgba(102, 126, 234, 0.4);
+            border-color: rgba(102, 126, 234, 0.6);
         }
         
         .touch-up { grid-column: 2; grid-row: 1; }
@@ -289,6 +289,7 @@
         </div>
         
         <div id="startScreen">
+            <button class="btn" id="startBtn">START GAME</button>
             <h1>🎮 Gyro Pac-Man</h1>
             <p id="instructions">
                 Tilt your phone to control Pac-Man!<br>
@@ -313,6 +314,7 @@
         </div>
         
         <div id="gameOverScreen">
+            <button class="btn" id="restartBtn">PLAY AGAIN</button>
             <h1 id="gameOverTitle">Game Over!</h1>
             <div id="finalScore">Score: 0</div>
             
