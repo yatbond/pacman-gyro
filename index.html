@@ -243,20 +243,12 @@
         
         #touchHint {
             position: fixed;
-            bottom: 115px;
+            bottom: 130px;
             left: 50%;
             transform: translateX(-50%);
             font-size: 0.8rem;
             color: rgba(255, 255, 255, 0.5);
             z-index: 100;
-        }
-        
-        #gyroDot {
-            width: 20px;
-            height: 20px;
-            background: #00ff88;
-            border-radius: 50%;
-            box-shadow: 0 0 10px #00ff88;
         }
         
         #instructions {
@@ -271,16 +263,12 @@
 </head>
 <body>
     <div id="game-container">
-        <div id="status">Tilt your phone to move Pac-Man!</div>
+        <div id="status">Use D-Pad below to move Pac-Man!</div>
         <div id="powerModeIndicator">🔥 POWER MODE! Eat the ghosts! 🔥</div>
         
         <canvas id="gameCanvas"></canvas>
         
-        <div id="gyroIndicator">
-            <div id="gyroDot"></div>
-        </div>
-        
-        <div id="touchHint">← Use D-Pad or Tilt →</div>
+        <div id="touchHint">Use D-Pad below to move</div>
         <div id="touchControls">
             <div class="touch-btn touch-up" data-dir="up">↑</div>
             <div class="touch-btn touch-left" data-dir="left">←</div>
@@ -357,11 +345,6 @@
         let ghosts = [];
         let dots = [];
         let walls = [];
-        
-        // Gyroscope
-        let gyroX = 0;
-        let gyroY = 0;
-        let permissionGranted = false;
         
         // Initialize
         function init() {
@@ -505,24 +488,6 @@
             }
         }
         
-        // Update Pac-Man Direction based on Gyroscope
-        function updatePacmanDirection() {
-            // Threshold decreases as sensitivity increases
-            const threshold = 15 - (gyroSensitivity - 1) * 1.3;
-            
-            if (Math.abs(gyroY) > threshold) {
-                pacman.nextDirection = gyroY > 0 ? 'down' : 'up';
-            } else if (Math.abs(gyroX) > threshold) {
-                pacman.nextDirection = gyroX > 0 ? 'right' : 'left';
-            }
-            
-            // Try to change direction
-            const nextPos = getNextPosition(pacman.x, pacman.y, pacman.nextDirection);
-            if (!isWall(nextPos.x, nextPos.y)) {
-                pacman.direction = pacman.nextDirection;
-            }
-        }
-        
         // Move Pac-Man
         function movePacman() {
             const nextPos = getNextPosition(pacman.x, pacman.y, pacman.direction);
@@ -648,7 +613,7 @@
             });
             
             // Draw dots
-            ctx.fillStyle = '#ffd700';
+            ctx.fillStyle = '#ffffff';
             dots.forEach(dot => {
                 if (!dot.eaten) {
                     ctx.beginPath();
@@ -681,9 +646,7 @@
                 }
             });
             
-            // Draw Pac-Man
-            ctx.fillStyle = powerMode ? '#00ff00' : '#ffd700';
-            ctx.beginPath();
+            // Draw Pac-Man with gradient and glow
             const pacmanCenterX = pacman.x * CELL_SIZE + CELL_SIZE / 2;
             const pacmanCenterY = pacman.y * CELL_SIZE + CELL_SIZE / 2;
             const radius = CELL_SIZE / 2 - 2;
@@ -697,9 +660,26 @@
                 case 'left': startAngle = 0.8 * Math.PI; endAngle = 3.2 * Math.PI; break;
             }
             
+            // Glow effect
+            ctx.shadowColor = powerMode ? '#00ff00' : '#ffd700';
+            ctx.shadowBlur = 10;
+            
+            // Gradient fill
+            const gradient = ctx.createRadialGradient(
+                pacmanCenterX - 2, pacmanCenterY - 2, 0,
+                pacmanCenterX, pacmanCenterY, radius
+            );
+            gradient.addColorStop(0, powerMode ? '#88ff88' : '#ffec80');
+            gradient.addColorStop(1, powerMode ? '#00ff00' : '#ffd700');
+            
+            ctx.fillStyle = gradient;
+            ctx.beginPath();
             ctx.moveTo(pacmanCenterX, pacmanCenterY);
             ctx.arc(pacmanCenterX, pacmanCenterY, radius, startAngle, endAngle);
             ctx.fill();
+            
+            // Reset shadow
+            ctx.shadowBlur = 0;
             
             // Draw ghosts
             ghosts.forEach(ghost => {
@@ -732,110 +712,6 @@
             ctx.fillStyle = '#fff';
             ctx.font = '16px Arial';
             ctx.fillText(`Score: ${score}`, 10, 20);
-        }
-        
-        // Gyroscope Controls
-        function initGyroscope() {
-            const statusEl = document.getElementById('status');
-            
-            if (typeof DeviceOrientationEvent !== 'undefined') {
-                if (typeof DeviceOrientationEvent.requestPermission === 'function') {
-                    statusEl.textContent = 'Tap to enable gyro control';
-                    document.body.addEventListener('click', requestGyroPermission, { once: true });
-                } else {
-                    window.addEventListener('deviceorientation', handleOrientation);
-                    statusEl.textContent = 'Gyro enabled! Tilt to play';
-                    permissionGranted = true;
-                }
-            } else {
-                statusEl.textContent = 'Gyroscope not supported. Use tilt simulation below.';
-                initKeyboardFallback();
-            }
-        }
-        
-        async function requestGyroPermission() {
-            try {
-                const permission = await DeviceOrientationEvent.requestPermission();
-                if (permission === 'granted') {
-                    window.addEventListener('deviceorientation', handleOrientation);
-                    document.getElementById('status').textContent = 'Gyro enabled! Tilt to play';
-                    permissionGranted = true;
-                }
-            } catch (err) {
-                document.getElementById('status').textContent = 'Permission denied. Using touch controls.';
-                initTouchControls();
-            }
-        }
-        
-        function handleOrientation(event) {
-            if (!permissionGranted) return;
-            
-            let tiltX = event.gamma || 0;
-            let tiltY = event.beta || 0;
-            
-            // Much more sensitive gyro! Range: 2x to 8x
-            const sensitivityMultiplier = 2 + (gyroSensitivity / 10) * 6;
-            tiltX = tiltX * sensitivityMultiplier;
-            tiltY = tiltY * sensitivityMultiplier;
-            
-            tiltX = Math.max(-45, Math.min(45, tiltX));
-            tiltY = Math.max(-45, Math.min(45, tiltY));
-            
-            gyroX = tiltX;
-            gyroY = tiltY;
-            
-            const dot = document.getElementById('gyroDot');
-            const maxOffset = 25;
-            dot.style.transform = `translate(${tiltX * (maxOffset / 45)}px, ${tiltY * (maxOffset / 45)}px)`;
-        }
-        
-        function initKeyboardFallback() {
-            document.addEventListener('keydown', (e) => {
-                switch (e.key) {
-                    case 'ArrowUp': gyroY = -20; break;
-                    case 'ArrowDown': gyroY = 20; break;
-                    case 'ArrowLeft': gyroX = -20; break;
-                    case 'ArrowRight': gyroX = 20; break;
-                }
-                
-                setTimeout(() => {
-                    gyroX = 0;
-                    gyroY = 0;
-                    document.getElementById('gyroDot').style.transform = 'translate(0, 0)';
-                }, 100);
-            });
-        }
-        
-        function initTouchControls() {
-            const container = document.getElementById('game-container');
-            let touchStartX = 0, touchStartY = 0;
-            
-            container.addEventListener('touchstart', (e) => {
-                touchStartX = e.touches[0].clientX;
-                touchStartY = e.touches[0].clientY;
-            });
-            
-            container.addEventListener('touchmove', (e) => {
-                e.preventDefault();
-                const touchX = e.touches[0].clientX;
-                const touchY = e.touches[0].clientY;
-                
-                const diffX = touchX - touchStartX;
-                const diffY = touchY - touchStartY;
-                
-                gyroX = Math.max(-45, Math.min(45, diffX));
-                gyroY = Math.max(-45, Math.min(45, diffY));
-                
-                const dot = document.getElementById('gyroDot');
-                const maxOffset = 25;
-                dot.style.transform = `translate(${gyroX * (maxOffset / 45)}px, ${gyroY * (maxOffset / 45)}px)`;
-            });
-            
-            container.addEventListener('touchend', () => {
-                gyroX = 0;
-                gyroY = 0;
-                document.getElementById('gyroDot').style.transform = 'translate(0, 0)';
-            });
         }
         
         // D-Pad Touch Controls
@@ -883,7 +759,6 @@
         window.addEventListener('load', () => {
             init();
             initTouchPad();
-            initGyroscope();
         });
     </script>
 </body>
