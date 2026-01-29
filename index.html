@@ -291,11 +291,6 @@
                     <input type="range" class="slider" id="speedSlider" min="1" max="10" value="3">
                     <span class="setting-value" id="speedValue">3</span>
                 </div>
-                <div class="setting-row">
-                    <span class="setting-label">Gyro Sensitivity</span>
-                    <input type="range" class="slider" id="gyroSlider" min="1" max="10" value="5">
-                    <span class="setting-value" id="gyroValue">5</span>
-                </div>
             </div>
             
             <button class="btn" id="startBtn">START GAME</button>
@@ -312,14 +307,7 @@
                     <input type="range" class="slider" id="speedSliderEnd" min="1" max="10" value="3">
                     <span class="setting-value" id="speedValueEnd">3</span>
                 </div>
-                <div class="setting-row">
-                    <span class="setting-label">Gyro Sensitivity</span>
-                    <input type="range" class="slider" id="gyroSliderEnd" min="1" max="10" value="5">
-                    <span class="setting-value" id="gyroValueEnd">5</span>
-                </div>
             </div>
-            
-            <button class="btn" id="restartBtn">PLAY AGAIN</button>
         </div>
     </div>
 
@@ -332,7 +320,6 @@
         
         // Settings (loaded from localStorage or defaults)
         let gameSpeed = parseInt(localStorage.getItem('pacman-speed')) || 3;
-        let gyroSensitivity = parseInt(localStorage.getItem('pacman-gyro-sensitivity')) || 5;
         
         // Game State
         let canvas, ctx;
@@ -357,18 +344,16 @@
             document.getElementById('restartBtn').addEventListener('click', startGame);
             
             // Settings sliders (start screen)
-            setupSlider('speedSlider', 'speedValue', 'speed', gameSpeed);
-            setupSlider('gyroSlider', 'gyroValue', 'gyro', gyroSensitivity);
+            setupSlider('speedSlider', 'speedValue', gameSpeed);
             
             // Settings sliders (end screen)
-            setupSlider('speedSliderEnd', 'speedValueEnd', 'speed', gameSpeed);
-            setupSlider('gyroSliderEnd', 'gyroValueEnd', 'gyro', gyroSensitivity);
+            setupSlider('speedSliderEnd', 'speedValueEnd', gameSpeed);
             
             createMaze();
             draw();
         }
         
-        function setupSlider(sliderId, valueId, type, currentValue) {
+        function setupSlider(sliderId, valueId, currentValue) {
             const slider = document.getElementById(sliderId);
             const valueEl = document.getElementById(valueId);
             
@@ -378,19 +363,11 @@
             slider.addEventListener('input', (e) => {
                 const val = parseInt(e.target.value);
                 valueEl.textContent = val;
-                if (type === 'speed') {
-                    gameSpeed = val;
-                    localStorage.setItem('pacman-speed', val);
-                    // Update end screen slider too
-                    document.getElementById('speedSliderEnd').value = val;
-                    document.getElementById('speedValueEnd').textContent = val;
-                } else {
-                    gyroSensitivity = val;
-                    localStorage.setItem('pacman-gyro-sensitivity', val);
-                    // Update end screen slider too
-                    document.getElementById('gyroSliderEnd').value = val;
-                    document.getElementById('gyroValueEnd').textContent = val;
-                }
+                gameSpeed = val;
+                localStorage.setItem('pacman-speed', val);
+                // Update end screen slider too
+                document.getElementById('speedSliderEnd').value = val;
+                document.getElementById('speedValueEnd').textContent = val;
             });
         }
         
@@ -470,9 +447,6 @@
         
         // Update Game
         function update() {
-            // Update Pac-Man direction from gyroscope
-            updatePacmanDirection();
-            
             // Move Pac-Man
             movePacman();
             
@@ -715,45 +689,56 @@
         }
         
         // D-Pad Touch Controls
+        let moveInterval = null;
+        let currentDirection = null;
+        
         function initTouchPad() {
             const touchBtns = document.querySelectorAll('.touch-btn');
             
             touchBtns.forEach(btn => {
                 const dir = btn.dataset.dir;
                 
-                // Touch events
-                btn.addEventListener('touchstart', (e) => {
+                const startMoving = (e) => {
                     e.preventDefault();
-                    setDirection(dir);
+                    currentDirection = dir;
                     btn.style.background = 'rgba(102, 126, 234, 0.7)';
-                });
+                    
+                    // Set direction immediately
+                    pacman.direction = dir;
+                    pacman.nextDirection = dir;
+                    
+                    // Keep moving while held
+                    moveInterval = setInterval(() => {
+                        const nextPos = getNextPosition(pacman.x, pacman.y, dir);
+                        if (!isWall(nextPos.x, nextPos.y)) {
+                            pacman.x = nextPos.x;
+                            pacman.y = nextPos.y;
+                        } else {
+                            // Try next direction if wall
+                            pacman.direction = dir;
+                            pacman.nextDirection = dir;
+                        }
+                    }, 150);
+                };
                 
-                btn.addEventListener('touchend', (e) => {
+                const stopMoving = (e) => {
                     e.preventDefault();
+                    clearInterval(moveInterval);
+                    moveInterval = null;
+                    currentDirection = null;
                     btn.style.background = '';
-                });
+                };
                 
-                // Mouse events (for testing on desktop)
-                btn.addEventListener('mousedown', () => {
-                    setDirection(dir);
-                });
+                // Touch events
+                btn.addEventListener('touchstart', startMoving);
+                btn.addEventListener('touchend', stopMoving);
+                btn.addEventListener('touchcancel', stopMoving);
                 
-                btn.addEventListener('mouseup', () => {
-                    // Keep the direction
-                });
-                
-                btn.addEventListener('mouseleave', () => {
-                    btn.style.background = '';
-                });
+                // Mouse events (for desktop testing)
+                btn.addEventListener('mousedown', startMoving);
+                btn.addEventListener('mouseup', stopMoving);
+                btn.addEventListener('mouseleave', stopMoving);
             });
-        }
-        
-        function setDirection(dir) {
-            const nextPos = getNextPosition(pacman.x, pacman.y, dir);
-            if (!isWall(nextPos.x, nextPos.y)) {
-                pacman.direction = dir;
-                pacman.nextDirection = dir;
-            }
         }
         
         window.addEventListener('load', () => {
