@@ -64,6 +64,63 @@
             display: none;
         }
         
+        .settings-section {
+            background: rgba(255, 255, 255, 0.1);
+            padding: 20px;
+            border-radius: 15px;
+            margin: 15px;
+            min-width: 280px;
+        }
+        
+        .setting-row {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin: 15px 0;
+        }
+        
+        .setting-label {
+            font-size: 1rem;
+            color: #fff;
+        }
+        
+        .setting-value {
+            font-size: 1.2rem;
+            color: #ffd700;
+            font-weight: bold;
+            min-width: 30px;
+            text-align: center;
+        }
+        
+        .slider {
+            -webkit-appearance: none;
+            width: 150px;
+            height: 8px;
+            border-radius: 5px;
+            background: rgba(255, 255, 255, 0.2);
+            outline: none;
+        }
+        
+        .slider::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            appearance: none;
+            width: 24px;
+            height: 24px;
+            border-radius: 50%;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            cursor: pointer;
+            box-shadow: 0 2px 10px rgba(102, 126, 234, 0.5);
+        }
+        
+        .slider::-moz-range-thumb {
+            width: 24px;
+            height: 24px;
+            border-radius: 50%;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            cursor: pointer;
+            border: none;
+        }
+        
         h1 {
             font-size: 2.5rem;
             color: #ffd700;
@@ -156,6 +213,20 @@
                 Collect all dots to win.<br>
                 Avoid the ghosts! 👻
             </p>
+            
+            <div class="settings-section">
+                <div class="setting-row">
+                    <span class="setting-label">Game Speed</span>
+                    <input type="range" class="slider" id="speedSlider" min="1" max="10" value="5">
+                    <span class="setting-value" id="speedValue">5</span>
+                </div>
+                <div class="setting-row">
+                    <span class="setting-label">Gyro Sensitivity</span>
+                    <input type="range" class="slider" id="gyroSlider" min="1" max="10" value="5">
+                    <span class="setting-value" id="gyroValue">5</span>
+                </div>
+            </div>
+            
             <button class="btn" id="startBtn">START GAME</button>
         </div>
         
@@ -172,6 +243,10 @@
         const CELL_SIZE = 20;
         const COLS = CANVAS_SIZE / CELL_SIZE;
         const ROWS = CANVAS_SIZE / CELL_SIZE;
+        
+        // Settings (loaded from localStorage or defaults)
+        let gameSpeed = parseInt(localStorage.getItem('pacman-speed')) || 5;
+        let gyroSensitivity = parseInt(localStorage.getItem('pacman-gyro-sensitivity')) || 5;
         
         // Game State
         let canvas, ctx;
@@ -196,6 +271,31 @@
             
             document.getElementById('startBtn').addEventListener('click', startGame);
             document.getElementById('restartBtn').addEventListener('click', startGame);
+            
+            // Settings sliders
+            const speedSlider = document.getElementById('speedSlider');
+            const gyroSlider = document.getElementById('gyroSlider');
+            const speedValue = document.getElementById('speedValue');
+            const gyroValue = document.getElementById('gyroValue');
+            
+            // Set initial values
+            speedSlider.value = gameSpeed;
+            gyroSlider.value = gyroSensitivity;
+            speedValue.textContent = gameSpeed;
+            gyroValue.textContent = gyroSensitivity;
+            
+            // Update settings on slider change
+            speedSlider.addEventListener('input', (e) => {
+                gameSpeed = parseInt(e.target.value);
+                speedValue.textContent = gameSpeed;
+                localStorage.setItem('pacman-speed', gameSpeed);
+            });
+            
+            gyroSlider.addEventListener('input', (e) => {
+                gyroSensitivity = parseInt(e.target.value);
+                gyroValue.textContent = gyroSensitivity;
+                localStorage.setItem('pacman-gyro-sensitivity', gyroSensitivity);
+            });
             
             createMaze();
             draw();
@@ -224,11 +324,15 @@
             // Clear spawn area
             pacman = { x: 1, y: 1, direction: 'right', nextDirection: 'right' };
             
+            // Calculate ghost speed based on game speed (1-10)
+            // Base speed 0.01, max additional 0.04 (so 0.01 to 0.05)
+            const baseGhostSpeed = 0.01 + (gameSpeed - 1) * 0.005;
+            
             // Create ghosts
             ghosts = [
-                { x: COLS - 2, y: ROWS - 2, color: '#ff0000', direction: 'up', speed: 0.03 },
-                { x: COLS - 2, y: 2, color: '#ffb8ff', direction: 'down', speed: 0.025 },
-                { x: 2, y: ROWS - 2, color: '#00ffff', direction: 'up', speed: 0.025 }
+                { x: COLS - 2, y: ROWS - 2, color: '#ff0000', direction: 'up', speed: baseGhostSpeed },
+                { x: COLS - 2, y: 2, color: '#ffb8ff', direction: 'down', speed: baseGhostSpeed * 0.9 },
+                { x: 2, y: ROWS - 2, color: '#00ffff', direction: 'up', speed: baseGhostSpeed * 0.8 }
             ];
         }
         
@@ -256,11 +360,19 @@
             // Update Pac-Man direction from gyroscope
             updatePacmanDirection();
             
-            // Move Pac-Man
-            movePacman();
+            // Move Pac-Man multiple times based on speed setting
+            // Speed 1 = 1 move per frame, Speed 10 = 3 moves per frame
+            const movesPerFrame = Math.ceil(gameSpeed / 3.5);
+            for (let i = 0; i < movesPerFrame; i++) {
+                movePacman();
+            }
             
-            // Move ghosts
-            ghosts.forEach(ghost => moveGhost(ghost));
+            // Move ghosts (frequency based on speed)
+            // Higher speed = more frequent ghost movement
+            const ghostThreshold = 11 - gameSpeed; // Speed 1 = threshold 10, Speed 10 = threshold 1
+            if (Math.random() * 10 < gameSpeed) {
+                ghosts.forEach(ghost => moveGhost(ghost));
+            }
             
             // Check collisions
             checkCollisions();
@@ -273,7 +385,9 @@
         
         // Update Pac-Man Direction based on Gyroscope
         function updatePacmanDirection() {
-            const threshold = 5;
+            // Threshold decreases as sensitivity increases (more sensitive)
+            // Range: sensitivity 1 = threshold 15, sensitivity 10 = threshold 3
+            const threshold = 15 - (gyroSensitivity - 1) * 1.3;
             
             if (Math.abs(gyroY) > threshold) {
                 pacman.nextDirection = gyroY > 0 ? 'down' : 'up';
@@ -474,6 +588,12 @@
             // Get tilt (gamma = left/right, beta = front/back)
             let tiltX = event.gamma || 0;  // Left/Right tilt (-90 to 90)
             let tiltY = event.beta || 0;   // Front/Back tilt (-180 to 180)
+            
+            // Apply sensitivity multiplier
+            // Higher sensitivity = larger values = more responsive
+            const sensitivityMultiplier = 0.5 + (gyroSensitivity / 10) * 1.5; // Range: 1.0 to 2.0
+            tiltX = tiltX * sensitivityMultiplier;
+            tiltY = tiltY * sensitivityMultiplier;
             
             // Clamp values
             tiltX = Math.max(-45, Math.min(45, tiltX));
