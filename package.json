@@ -1,0 +1,13 @@
+{
+  "name": "pacman-gyro",
+  "version": "1.0.0",
+  "description": "Mobile Pac-Man game controlled by phone gyroscope",
+  "main": "index.js",
+  "scripts": {
+    "dev": "npx serve .",
+    "build": "echo 'Static site - no build needed'"
+  },
+  "keywords": ["pacman", "game", "gyroscope", "mobile"],
+  "author": "",
+  "license": "MIT"
+}

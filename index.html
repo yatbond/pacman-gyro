@@ -1,0 +1,551 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="mobile-web-app-capable" content="yes">
+    <title>Gyro Pac-Man</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            touch-action: none;
+            user-select: none;
+            -webkit-user-select: none;
+        }
+        
+        body {
+            background: #1a1a2e;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            overflow: hidden;
+            color: #fff;
+        }
+        
+        #game-container {
+            position: relative;
+            width: 100vw;
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+        }
+        
+        #gameCanvas {
+            background: #000;
+            border: 2px solid #16213e;
+            border-radius: 8px;
+            max-width: 100%;
+            max-height: 70vh;
+        }
+        
+        #startScreen, #gameOverScreen {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            background: rgba(0, 0, 0, 0.9);
+            z-index: 10;
+        }
+        
+        #gameOverScreen {
+            display: none;
+        }
+        
+        h1 {
+            font-size: 2.5rem;
+            color: #ffd700;
+            text-shadow: 0 0 10px rgba(255, 215, 0, 0.5);
+            margin-bottom: 20px;
+        }
+        
+        #score {
+            font-size: 1.5rem;
+            margin-bottom: 20px;
+            color: #00ff88;
+        }
+        
+        .btn {
+            padding: 15px 40px;
+            font-size: 1.2rem;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            border: none;
+            border-radius: 30px;
+            color: white;
+            cursor: pointer;
+            margin: 10px;
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+        
+        .btn:hover {
+            transform: scale(1.05);
+            box-shadow: 0 5px 20px rgba(102, 126, 234, 0.4);
+        }
+        
+        #status {
+            position: fixed;
+            top: 10px;
+            left: 50%;
+            transform: translateX(-50%);
+            padding: 8px 16px;
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 20px;
+            font-size: 0.9rem;
+            text-align: center;
+            z-index: 100;
+        }
+        
+        #gyroIndicator {
+            position: fixed;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 80px;
+            height: 80px;
+            border: 3px solid rgba(255, 255, 255, 0.3);
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 100;
+        }
+        
+        #gyroDot {
+            width: 20px;
+            height: 20px;
+            background: #00ff88;
+            border-radius: 50%;
+            box-shadow: 0 0 10px #00ff88;
+        }
+        
+        #instructions {
+            margin-top: 20px;
+            text-align: center;
+            opacity: 0.8;
+            font-size: 0.9rem;
+            line-height: 1.6;
+        }
+    </style>
+</head>
+<body>
+    <div id="game-container">
+        <div id="status">Tilt your phone to move Pac-Man!</div>
+        
+        <canvas id="gameCanvas"></canvas>
+        
+        <div id="gyroIndicator">
+            <div id="gyroDot"></div>
+        </div>
+        
+        <div id="startScreen">
+            <h1>🎮 Gyro Pac-Man</h1>
+            <p id="instructions">
+                Tilt your phone to control Pac-Man!<br>
+                Collect all dots to win.<br>
+                Avoid the ghosts! 👻
+            </p>
+            <button class="btn" id="startBtn">START GAME</button>
+        </div>
+        
+        <div id="gameOverScreen">
+            <h1>Game Over!</h1>
+            <div id="score">Score: 0</div>
+            <button class="btn" id="restartBtn">PLAY AGAIN</button>
+        </div>
+    </div>
+
+    <script>
+        // Game Configuration
+        const CANVAS_SIZE = 400;
+        const CELL_SIZE = 20;
+        const COLS = CANVAS_SIZE / CELL_SIZE;
+        const ROWS = CANVAS_SIZE / CELL_SIZE;
+        
+        // Game State
+        let canvas, ctx;
+        let gameRunning = false;
+        let score = 0;
+        let pacman = { x: 1, y: 1, direction: 'right', nextDirection: 'right' };
+        let ghosts = [];
+        let dots = [];
+        let walls = [];
+        
+        // Gyroscope
+        let gyroX = 0;
+        let gyroY = 0;
+        let permissionGranted = false;
+        
+        // Initialize
+        function init() {
+            canvas = document.getElementById('gameCanvas');
+            canvas.width = CANVAS_SIZE;
+            canvas.height = CANVAS_SIZE;
+            ctx = canvas.getContext('2d');
+            
+            document.getElementById('startBtn').addEventListener('click', startGame);
+            document.getElementById('restartBtn').addEventListener('click', startGame);
+            
+            createMaze();
+            draw();
+        }
+        
+        // Create Maze
+        function createMaze() {
+            walls = [];
+            dots = [];
+            
+            // Simple maze pattern
+            for (let y = 0; y < ROWS; y++) {
+                for (let x = 0; x < COLS; x++) {
+                    if (y === 0 || y === ROWS - 1 || x === 0 || x === COLS - 1) {
+                        walls.push({ x, y });
+                    } else if (x % 4 === 0 && y % 4 === 0 && !(x === 1 && y === 1)) {
+                        walls.push({ x, y });
+                    } else if (Math.random() < 0.1 && !(x === 1 && y === 1)) {
+                        walls.push({ x, y });
+                    } else {
+                        dots.push({ x, y, eaten: false });
+                    }
+                }
+            }
+            
+            // Clear spawn area
+            pacman = { x: 1, y: 1, direction: 'right', nextDirection: 'right' };
+            
+            // Create ghosts
+            ghosts = [
+                { x: COLS - 2, y: ROWS - 2, color: '#ff0000', direction: 'up', speed: 0.03 },
+                { x: COLS - 2, y: 2, color: '#ffb8ff', direction: 'down', speed: 0.025 },
+                { x: 2, y: ROWS - 2, color: '#00ffff', direction: 'up', speed: 0.025 }
+            ];
+        }
+        
+        // Start Game
+        function startGame() {
+            score = 0;
+            gameRunning = true;
+            document.getElementById('startScreen').style.display = 'none';
+            document.getElementById('gameOverScreen').style.display = 'none';
+            createMaze();
+            requestAnimationFrame(gameLoop);
+        }
+        
+        // Game Loop
+        function gameLoop() {
+            if (!gameRunning) return;
+            
+            update();
+            draw();
+            requestAnimationFrame(gameLoop);
+        }
+        
+        // Update Game
+        function update() {
+            // Update Pac-Man direction from gyroscope
+            updatePacmanDirection();
+            
+            // Move Pac-Man
+            movePacman();
+            
+            // Move ghosts
+            ghosts.forEach(ghost => moveGhost(ghost));
+            
+            // Check collisions
+            checkCollisions();
+            
+            // Check win condition
+            if (dots.filter(d => !d.eaten).length === 0) {
+                gameOver(true);
+            }
+        }
+        
+        // Update Pac-Man Direction based on Gyroscope
+        function updatePacmanDirection() {
+            const threshold = 5;
+            
+            if (Math.abs(gyroY) > threshold) {
+                pacman.nextDirection = gyroY > 0 ? 'down' : 'up';
+            } else if (Math.abs(gyroX) > threshold) {
+                pacman.nextDirection = gyroX > 0 ? 'right' : 'left';
+            }
+            
+            // Try to change direction
+            const nextPos = getNextPosition(pacman.x, pacman.y, pacman.nextDirection);
+            if (!isWall(nextPos.x, nextPos.y)) {
+                pacman.direction = pacman.nextDirection;
+            }
+        }
+        
+        // Move Pac-Man
+        function movePacman() {
+            const nextPos = getNextPosition(pacman.x, pacman.y, pacman.direction);
+            
+            if (!isWall(nextPos.x, nextPos.y)) {
+                pacman.x = nextPos.x;
+                pacman.y = nextPos.y;
+            }
+            
+            // Eat dots
+            const dot = dots.find(d => d.x === pacman.x && d.y === pacman.y && !d.eaten);
+            if (dot) {
+                dot.eaten = true;
+                score += 10;
+            }
+        }
+        
+        // Move Ghost
+        function moveGhost(ghost) {
+            const directions = ['up', 'down', 'left', 'right'];
+            const sortedDirs = directions.sort(() => Math.random() - 0.5);
+            
+            for (const dir of sortedDirs) {
+                const nextPos = getNextPosition(ghost.x, ghost.y, dir);
+                if (!isWall(nextPos.x, nextPos.y) && !isGhost(nextPos.x, nextPos.y)) {
+                    ghost.direction = dir;
+                    ghost.x = nextPos.x;
+                    ghost.y = nextPos.y;
+                    break;
+                }
+            }
+        }
+        
+        // Check Collisions
+        function checkCollisions() {
+            for (const ghost of ghosts) {
+                if (ghost.x === pacman.x && ghost.y === pacman.y) {
+                    gameOver(false);
+                    return;
+                }
+            }
+        }
+        
+        // Game Over
+        function gameOver(won) {
+            gameRunning = false;
+            document.getElementById('gameOverScreen').style.display = 'flex';
+            document.getElementById('score').textContent = won ? `You Win! Score: ${score}` : `Game Over! Score: ${score}`;
+        }
+        
+        // Helper Functions
+        function getNextPosition(x, y, direction) {
+            const offsets = { up: { x: 0, y: -1 }, down: { x: 0, y: 1 }, left: { x: -1, y: 0 }, right: { x: 1, y: 0 } };
+            return { x: x + offsets[direction].x, y: y + offsets[direction].y };
+        }
+        
+        function isWall(x, y) {
+            return walls.some(w => w.x === x && w.y === y);
+        }
+        
+        function isGhost(x, y) {
+            return ghosts.some(g => g.x === x && g.y === y);
+        }
+        
+        // Draw
+        function draw() {
+            // Clear canvas
+            ctx.fillStyle = '#000';
+            ctx.fillRect(0, 0, CANVAS_SIZE, CANVAS_SIZE);
+            
+            // Draw walls
+            ctx.fillStyle = '#16213e';
+            walls.forEach(wall => {
+                ctx.fillRect(wall.x * CELL_SIZE, wall.y * CELL_SIZE, CELL_SIZE, CELL_SIZE);
+            });
+            
+            // Draw dots
+            ctx.fillStyle = '#ffd700';
+            dots.forEach(dot => {
+                if (!dot.eaten) {
+                    ctx.beginPath();
+                    ctx.arc(
+                        dot.x * CELL_SIZE + CELL_SIZE / 2,
+                        dot.y * CELL_SIZE + CELL_SIZE / 2,
+                        4, 0, Math.PI * 2
+                    );
+                    ctx.fill();
+                }
+            });
+            
+            // Draw Pac-Man
+            ctx.fillStyle = '#ffd700';
+            ctx.beginPath();
+            const pacmanCenterX = pacman.x * CELL_SIZE + CELL_SIZE / 2;
+            const pacmanCenterY = pacman.y * CELL_SIZE + CELL_SIZE / 2;
+            const radius = CELL_SIZE / 2 - 2;
+            
+            let startAngle = 0.3 * Math.PI;
+            let endAngle = 2.7 * Math.PI;
+            
+            switch (pacman.direction) {
+                case 'up': startAngle = 1.3 * Math.PI; endAngle = 3.7 * Math.PI; break;
+                case 'down': startAngle = 0.7 * Math.PI; endAngle = 3.1 * Math.PI; break;
+                case 'left': startAngle = 0.8 * Math.PI; endAngle = 3.2 * Math.PI; break;
+            }
+            
+            ctx.moveTo(pacmanCenterX, pacmanCenterY);
+            ctx.arc(pacmanCenterX, pacmanCenterY, radius, startAngle, endAngle);
+            ctx.fill();
+            
+            // Draw ghosts
+            ghosts.forEach(ghost => {
+                ctx.fillStyle = ghost.color;
+                const ghostX = ghost.x * CELL_SIZE;
+                const ghostY = ghost.y * CELL_SIZE;
+                
+                // Ghost body
+                ctx.beginPath();
+                ctx.arc(ghostX + CELL_SIZE / 2, ghostY + CELL_SIZE / 2 - 2, CELL_SIZE / 2 - 2, Math.PI, 0);
+                ctx.lineTo(ghostX + CELL_SIZE - 4, ghostY + CELL_SIZE);
+                ctx.lineTo(ghostX + 4, ghostY + CELL_SIZE);
+                ctx.fill();
+                
+                // Eyes
+                ctx.fillStyle = '#fff';
+                ctx.beginPath();
+                ctx.arc(ghostX + 6, ghostY + 7, 4, 0, Math.PI * 2);
+                ctx.arc(ghostX + 14, ghostY + 7, 4, 0, Math.PI * 2);
+                ctx.fill();
+                
+                ctx.fillStyle = '#000';
+                ctx.beginPath();
+                ctx.arc(ghostX + 7, ghostY + 7, 2, 0, Math.PI * 2);
+                ctx.arc(ghostX + 15, ghostY + 7, 2, 0, Math.PI * 2);
+                ctx.fill();
+            });
+            
+            // Draw score
+            ctx.fillStyle = '#fff';
+            ctx.font = '16px Arial';
+            ctx.fillText(`Score: ${score}`, 10, 20);
+        }
+        
+        // Gyroscope Controls
+        function initGyroscope() {
+            const statusEl = document.getElementById('status');
+            
+            // Check for DeviceOrientationEvent
+            if (typeof DeviceOrientationEvent !== 'undefined') {
+                // iOS 13+ requires permission
+                if (typeof DeviceOrientationEvent.requestPermission === 'function') {
+                    // Show permission button
+                    statusEl.textContent = 'Tap to enable gyro control';
+                    document.body.addEventListener('click', requestGyroPermission, { once: true });
+                } else {
+                    // Non-iOS devices
+                    window.addEventListener('deviceorientation', handleOrientation);
+                    statusEl.textContent = 'Gyro enabled! Tilt to play';
+                    permissionGranted = true;
+                }
+            } else {
+                statusEl.textContent = 'Gyroscope not supported. Use tilt simulation below.';
+                initKeyboardFallback();
+            }
+        }
+        
+        async function requestGyroPermission() {
+            try {
+                const permission = await DeviceOrientationEvent.requestPermission();
+                if (permission === 'granted') {
+                    window.addEventListener('deviceorientation', handleOrientation);
+                    document.getElementById('status').textContent = 'Gyro enabled! Tilt to play';
+                    permissionGranted = true;
+                }
+            } catch (err) {
+                document.getElementById('status').textContent = 'Permission denied. Using touch controls.';
+                initTouchControls();
+            }
+        }
+        
+        function handleOrientation(event) {
+            if (!permissionGranted) return;
+            
+            // Get tilt (gamma = left/right, beta = front/back)
+            let tiltX = event.gamma || 0;  // Left/Right tilt (-90 to 90)
+            let tiltY = event.beta || 0;   // Front/Back tilt (-180 to 180)
+            
+            // Clamp values
+            tiltX = Math.max(-45, Math.min(45, tiltX));
+            tiltY = Math.max(-45, Math.min(45, tiltY));
+            
+            // Update global gyro values
+            gyroX = tiltX;
+            gyroY = tiltY;
+            
+            // Update visual indicator
+            const dot = document.getElementById('gyroDot');
+            const maxOffset = 25;
+            dot.style.transform = `translate(${tiltX * (maxOffset / 45)}px, ${tiltY * (maxOffset / 45)}px)`;
+        }
+        
+        // Keyboard fallback for desktop testing
+        function initKeyboardFallback() {
+            document.addEventListener('keydown', (e) => {
+                switch (e.key) {
+                    case 'ArrowUp': gyroY = -20; break;
+                    case 'ArrowDown': gyroY = 20; break;
+                    case 'ArrowLeft': gyroX = -20; break;
+                    case 'ArrowRight': gyroX = 20; break;
+                }
+                
+                // Reset after key release
+                setTimeout(() => {
+                    gyroX = 0;
+                    gyroY = 0;
+                    document.getElementById('gyroDot').style.transform = 'translate(0, 0)';
+                }, 100);
+            });
+        }
+        
+        // Touch fallback
+        function initTouchControls() {
+            const container = document.getElementById('game-container');
+            let touchStartX = 0, touchStartY = 0;
+            
+            container.addEventListener('touchstart', (e) => {
+                touchStartX = e.touches[0].clientX;
+                touchStartY = e.touches[0].clientY;
+            });
+            
+            container.addEventListener('touchmove', (e) => {
+                e.preventDefault();
+                const touchX = e.touches[0].clientX;
+                const touchY = e.touches[0].clientY;
+                
+                const diffX = touchX - touchStartX;
+                const diffY = touchY - touchStartY;
+                
+                gyroX = Math.max(-45, Math.min(45, diffX));
+                gyroY = Math.max(-45, Math.min(45, diffY));
+                
+                const dot = document.getElementById('gyroDot');
+                const maxOffset = 25;
+                dot.style.transform = `translate(${gyroX * (maxOffset / 45)}px, ${gyroY * (maxOffset / 45)}px)`;
+            });
+            
+            container.addEventListener('touchend', () => {
+                gyroX = 0;
+                gyroY = 0;
+                document.getElementById('gyroDot').style.transform = 'translate(0, 0)';
+            });
+        }
+        
+        // Initialize on load
+        window.addEventListener('load', () => {
+            init();
+            initGyroscope();
+        });
+    </script>
+</body>
+</html>
